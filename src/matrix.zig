@@ -1,19 +1,27 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Error = error{
+pub const Error = error{
+    /// Coordinates provided are outside the Matrix.
     OutOfRange,
 };
 
+/// A 2 dimensional array with a fixed size.
+/// This struct internally stores a 'std.mem.Allocator'.
 pub fn Matrix(comptime t: type) type {
     return struct {
         const Self = @This();
 
+        /// Contents of the Matrix.
         mat: [][]t = undefined,
         allocator: Allocator = undefined,
+        /// Count of rows in the Matrix.
         rows: usize = 0,
+        /// Count of columns in the Matrix.
         cols: usize = 0,
 
+        /// Initialise the Matrix with set values.
+        /// Caller must call 'deinit' to free memory.
         fn init(allocator: Allocator, rows: usize, cols: usize) Allocator.Error!Self {
             var m = Self{
                 .mat = try allocator.alloc([]t, rows),
@@ -27,6 +35,7 @@ pub fn Matrix(comptime t: type) type {
             return m;
         }
 
+        /// Free all resources allocated by the struct.
         fn deinit(self: Self) void {
             for (0..self.rows) |row| {
                 self.allocator.free(self.mat[row]);
@@ -34,6 +43,8 @@ pub fn Matrix(comptime t: type) type {
             self.allocator.free(self.mat);
         }
 
+        /// Flush the Matrix with a single value. If this is not called, there is no guarantee the
+        /// contents of any given cell is valid unless the caller has set it.
         fn flush(self: *Self, value: t) void {
             for (0..self.rows) |row| {
                 for (0..self.cols) |col| {
@@ -42,13 +53,13 @@ pub fn Matrix(comptime t: type) type {
             }
         }
 
+        /// Flush one row of the Matrix with a single value.
         fn flush_row(self: *Self, row: usize, value: t) Error!void {
             if (self._invalid_coord(row, 0)) return Error.OutOfRange;
-            for (0..self.cols) |col| {
-                self.mat[row][col] = value;
-            }
+            self.flush_row_unchecked(row, value);
         }
 
+        /// Flush one column of the Matrix with a single value.
         fn flush_col(self: *Self, col: usize, value: t) Error!void {
             if (self._invalid_coord(0, col)) return Error.OutOfRange;
             for (0..self.rows) |row| {
@@ -56,20 +67,24 @@ pub fn Matrix(comptime t: type) type {
             }
         }
 
+        /// Set a specific cell with a value.
         fn set(self: *Self, row: usize, col: usize, value: t) Error!void {
             if (self._invalid_coord(row, col)) return Error.OutOfRange;
             self.mat[row][col] = value;
         }
 
+        /// Retrieve a specific cell's value.
         fn get(self: Self, row: usize, col: usize) Error!t {
             if (self._invalid_coord(row, col)) return Error.OutOfRange;
             return self.mat[row][col];
         }
 
+        /// Retrieve the value of the cell in the last row, last column.
         fn get_last(self: Self) t {
             return self.get(self.rows - 1, self.cols - 1) catch unreachable;
         }
 
+        // Returns if the coordinate provided is invalid.
         fn _invalid_coord(self: Self, row: usize, col: usize) bool {
             return row >= self.rows or col >= self.cols;
         }
