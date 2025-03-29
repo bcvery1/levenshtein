@@ -5,7 +5,9 @@ const utils = @import("utils.zig");
 
 const Allocator = std.mem.Allocator;
 
-pub const Error = matrix.Error || Allocator.Error;
+pub const Error = error{
+    EmptyDictionary,
+} || matrix.Error || Allocator.Error;
 
 pub fn distance(comptime t: type, allocator: Allocator, a: []const t, b: []const t) Error!usize {
     const rows = a.len + 1;
@@ -58,4 +60,116 @@ test "distance" {
     try expectEqual(1, try distance(u8, alloc, "foo", "food"));
     try expectEqual(3, try distance(u8, alloc, "foo", ""));
     try expectEqual(3, try distance(u8, alloc, "", "foo"));
+}
+
+/// Sorts the provided array in place, where the first element is the shortest Levenshtein distance
+/// to the word.
+pub fn sort_in_place(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t) Error!void {
+    if (dictionary.len == 0) return Error.EmptyDictionary;
+
+    var items = try allocator.alloc(DictItem(t), dictionary.len);
+    defer allocator.free(items);
+
+    for (0.., dictionary) |i, dict_word| {
+        items[i] = try DictItem(t).init(allocator, word, dict_word, i);
+    }
+
+    std.sort.heap(DictItem(t), items, {}, DictItem(t).less_than);
+    for (0.., items) |i, item| {
+        dictionary[i] = item.item;
+    }
+}
+
+/// Sorts the provided array, returning copy of the sorted array, preserving the original, where the
+/// first element of the returned array is the shortest Levenshtein distance to the word.
+///
+/// The caller is responsible for freeing the returned memory.
+pub fn sort(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t) Error![][]const t {
+    const dictionary_copy = try allocator.dupe([]const t, dictionary);
+    try sort_in_place(t, allocator, word, dictionary_copy);
+    return dictionary_copy;
+}
+
+test "sort" {
+    const alloc = std.testing.allocator;
+    const expectEqualStrings = std.testing.expectEqualStrings;
+
+    var dict = [_][]const u8{ "bar", "bazbar", "foo" };
+    const word = "fo";
+
+    const cp = try sort(u8, alloc, word, &dict);
+    defer alloc.free(cp);
+
+    // Check the copy has been reordered
+    try expectEqualStrings("foo", cp[0]);
+    try expectEqualStrings("bar", cp[1]);
+    try expectEqualStrings("bazbar", cp[2]);
+
+    // Check the original is unchanged
+    try expectEqualStrings("bar", dict[0]);
+    try expectEqualStrings("bazbar", dict[1]);
+    try expectEqualStrings("foo", dict[2]);
+}
+
+test "sort: empty dictionary" {
+    const alloc = std.testing.allocator;
+    const expectError = std.testing.expectError;
+
+    var dict = [_][]const u8{};
+    const word = "foo";
+
+    try expectError(Error.EmptyDictionary, sort(u8, alloc, word, &dict));
+}
+
+fn DictItem(comptime t: type) type {
+    return struct {
+        const Self = @This();
+
+        item: []const t = undefined,
+        // Value an arbitrary large number.
+        l_dist: usize = 1000000,
+        // The index of the word in the original dictionary.
+        index: usize = 0,
+
+        pub fn init(allocator: Allocator, word: []const t, dict_word: []const t, index: usize) Error!Self {
+            return Self{
+                .item = dict_word,
+                .l_dist = try distance(t, allocator, word, dict_word),
+                .index = index,
+            };
+        }
+
+        pub fn less_than(_: void, lhs: Self, rhs: Self) bool {
+            return lhs.l_dist < rhs.l_dist;
+        }
+    };
+}
+
+/// Returns the 'count' number of closest matches from the dictionary to 'word' according to
+/// Levenshtein distance.
+///
+/// This function mutates the dictionary in place.
+pub fn closest_values(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t, count: usize) Error![][]const t {
+    try sort_in_place(t, allocator, word, dictionary);
+    return dictionary[0..count];
+}
+
+/// Returns the closest match from the dictionary to 'word' according to the Levenshtein distance.
+/// If there are multiple matches of the same distance, this function will return one of them
+/// arbitrarily.
+///
+/// This function mutates the dictionary in place.
+pub fn closest(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t) Error![]const t {
+    const v = try closest_values(t, allocator, word, dictionary, 1);
+    return v[0];
+}
+
+test "closest" {
+    const alloc = std.testing.allocator;
+    const expectEqualStrings = std.testing.expectEqualStrings;
+
+    var dict = [_][]const u8{ "bar", "bazbar", "foo" };
+    const word = "fo";
+
+    try expectEqualStrings("foo", try closest(u8, alloc, word, &dict));
 }
