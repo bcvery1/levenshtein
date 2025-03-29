@@ -1,0 +1,14 @@
+name: Zig test
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Build and run tests
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
+      - run: zig build test
