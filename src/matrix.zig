@@ -66,6 +66,10 @@ pub fn Matrix(comptime t: type) type {
             return self.mat[row][col];
         }
 
+        fn get_last(self: Self) t {
+            return self.get(self.rows - 1, self.cols - 1) catch unreachable;
+        }
+
         fn _invalid_coord(self: Self, row: usize, col: usize) bool {
             return row >= self.rows or col >= self.cols;
         }
@@ -77,6 +81,19 @@ pub fn Matrix(comptime t: type) type {
             defer m.deinit();
             try m.set(1, 2, 7);
             try std.testing.expectEqual(7, try m.get(1, 2));
+        }
+
+        test "Matrix: get_last" {
+            const alloc = std.testing.allocator;
+
+            var m = try Matrix(u8).init(alloc, 4, 4);
+            defer m.deinit();
+
+            m.flush(13);
+
+            try m.set(3, 3, 4);
+
+            try std.testing.expectEqual(4, m.get_last());
         }
 
         test "Matrix: flush" {
