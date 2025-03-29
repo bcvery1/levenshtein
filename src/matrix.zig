@@ -22,7 +22,7 @@ pub fn Matrix(comptime t: type) type {
 
         /// Initialise the Matrix with set values.
         /// Caller must call 'deinit' to free memory.
-        fn init(allocator: Allocator, rows: usize, cols: usize) Allocator.Error!Self {
+        pub fn init(allocator: Allocator, rows: usize, cols: usize) Allocator.Error!Self {
             var m = Self{
                 .mat = try allocator.alloc([]t, rows),
                 .allocator = allocator,
@@ -36,7 +36,7 @@ pub fn Matrix(comptime t: type) type {
         }
 
         /// Free all resources allocated by the struct.
-        fn deinit(self: Self) void {
+        pub fn deinit(self: Self) void {
             for (0..self.rows) |row| {
                 self.allocator.free(self.mat[row]);
             }
@@ -45,7 +45,7 @@ pub fn Matrix(comptime t: type) type {
 
         /// Flush the Matrix with a single value. If this is not called, there is no guarantee the
         /// contents of any given cell is valid unless the caller has set it.
-        fn flush(self: *Self, value: t) void {
+        pub fn flush(self: *Self, value: t) void {
             for (0..self.rows) |row| {
                 for (0..self.cols) |col| {
                     self.mat[row][col] = value;
@@ -54,39 +54,39 @@ pub fn Matrix(comptime t: type) type {
         }
 
         /// Flush one row of the Matrix with a single value.
-        fn flush_row(self: *Self, row: usize, value: t) Error!void {
-            if (self._invalid_coord(row, 0)) return Error.OutOfRange;
+        pub fn flush_row(self: *Self, row: usize, value: t) Error!void {
+            if (self.invalid_coord(row, 0)) return Error.OutOfRange;
             for (0..self.cols) |col| {
                 self.mat[row][col] = value;
             }
         }
 
         /// Flush one column of the Matrix with a single value.
-        fn flush_col(self: *Self, col: usize, value: t) Error!void {
-            if (self._invalid_coord(0, col)) return Error.OutOfRange;
+        pub fn flush_col(self: *Self, col: usize, value: t) Error!void {
+            if (self.invalid_coord(0, col)) return Error.OutOfRange;
             for (0..self.rows) |row| {
                 self.mat[row][col] = value;
             }
         }
 
         /// Set a specific cell with a value.
-        fn set(self: *Self, row: usize, col: usize, value: t) Error!void {
-            if (self._invalid_coord(row, col)) return Error.OutOfRange;
+        pub fn set(self: *Self, row: usize, col: usize, value: t) Error!void {
+            if (self.invalid_coord(row, col)) return Error.OutOfRange;
             self.mat[row][col] = value;
         }
 
         /// Retrieve a specific cell's value.
-        fn get(self: Self, row: usize, col: usize) Error!t {
-            if (self._invalid_coord(row, col)) return Error.OutOfRange;
+        pub fn get(self: Self, row: usize, col: usize) Error!t {
+            if (self.invalid_coord(row, col)) return Error.OutOfRange;
             return self.mat[row][col];
         }
 
         /// Retrieve the value of the cell in the last row, last column.
-        fn get_last(self: Self) t {
+        pub fn get_last(self: Self) t {
             return self.get(self.rows - 1, self.cols - 1) catch unreachable;
         }
 
-        fn run_row_col(self: *Self, comptime f: fn (mat: *Self, row: usize, col: usize, value: t) void) void {
+        pub fn run_row_col(self: *Self, comptime f: fn (mat: *Self, row: usize, col: usize, value: t) void) void {
             for (0..self.rows) |row| {
                 for (0..self.cols) |col| {
                     const value = self.get(row, col) catch unreachable;
@@ -95,7 +95,7 @@ pub fn Matrix(comptime t: type) type {
             }
         }
 
-        fn run_row(self: *Self, row: usize, comptime f: fn (mat: *Self, col: usize, value: t) void) Error!void {
+        pub fn run_row(self: *Self, row: usize, comptime f: fn (mat: *Self, col: usize, value: t) void) Error!void {
             for (0..self.cols) |col| {
                 const value = try self.get(row, col);
                 // Safe to call the function on this column because the above call will check the
@@ -104,7 +104,7 @@ pub fn Matrix(comptime t: type) type {
             }
         }
 
-        fn run_col(self: *Self, col: usize, comptime f: fn (mat: *Self, row: usize, value: t) void) Error!void {
+        pub fn run_col(self: *Self, col: usize, comptime f: fn (mat: *Self, row: usize, value: t) void) Error!void {
             for (0..self.rows) |row| {
                 const value = try self.get(row, col);
                 // Safe to call the function on this column because the above call will check the
@@ -114,8 +114,44 @@ pub fn Matrix(comptime t: type) type {
         }
 
         // Returns if the coordinate provided is invalid.
-        fn _invalid_coord(self: Self, row: usize, col: usize) bool {
+        fn invalid_coord(self: Self, row: usize, col: usize) bool {
             return row >= self.rows or col >= self.cols;
+        }
+
+        /// Pretty prints the matrix. This function uses an arena allocator internally.
+        pub fn print(self: Self) Allocator.Error!void {
+            var arena = std.heap.ArenaAllocator.init(self.allocator);
+            defer arena.deinit();
+            const allocator = arena.allocator();
+
+            var builder = std.ArrayList(u8).init(allocator);
+            defer builder.deinit();
+            for (0..self.rows) |row| {
+                if (row == 0) {
+                    try builder.appendSlice("[");
+                } else {
+                    try builder.appendSlice(" ");
+                }
+
+                for (0..self.cols) |col| {
+                    const str = blk: {
+                        const value = self.get(row, col) catch unreachable;
+                        if (col == self.cols - 1) {
+                            break :blk try std.fmt.allocPrint(allocator, "{}", .{value});
+                        } else {
+                            break :blk try std.fmt.allocPrint(allocator, "{}, ", .{value});
+                        }
+                    };
+                    try builder.appendSlice(str);
+                }
+
+                if (row == self.rows - 1) {
+                    try builder.appendSlice("]\n");
+                } else {
+                    try builder.appendSlice("\n");
+                }
+            }
+            std.debug.print("{s}", .{try builder.toOwnedSlice()});
         }
 
         test "Matrix: run_row_col" {
