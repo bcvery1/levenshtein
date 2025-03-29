@@ -17,6 +17,26 @@ pub fn build(b: *std.Build) void {
     });
 
     b.installArtifact(lib);
+
+    // Examples
+    const basic_example = b.addExecutable(.{
+        .name = "basic",
+        .root_source_file = b.path("examples/basic.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    basic_example.root_module.addImport("lev", lib_mod);
+    b.installArtifact(basic_example);
+
+    const guess_name_example = b.addExecutable(.{
+        .name = "guess_name",
+        .root_source_file = b.path("examples/guess_name.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    guess_name_example.root_module.addImport("lev", lib_mod);
+    b.installArtifact(guess_name_example);
+
     const lib_unit_tests = b.addTest(.{
         .root_module = lib_mod,
     });

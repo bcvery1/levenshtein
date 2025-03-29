@@ -9,9 +9,9 @@ pub const Error = error{
     EmptyDictionary,
 } || matrix.Error || Allocator.Error;
 
-pub fn distance(comptime t: type, allocator: Allocator, a: []const t, b: []const t) Error!usize {
-    const rows = a.len + 1;
-    const cols = b.len + 1;
+pub fn distance(comptime t: type, allocator: Allocator, target_word: []const t, dict_word: []const t) Error!usize {
+    const rows = target_word.len + 1;
+    const cols = dict_word.len + 1;
 
     var dp = try matrix.Matrix(usize).init(allocator, rows, cols);
     defer dp.deinit();
@@ -26,7 +26,7 @@ pub fn distance(comptime t: type, allocator: Allocator, a: []const t, b: []const
             const prev_col = col - 1;
 
             const new_value = blk: {
-                if (a[prev_row] == b[prev_col]) {
+                if (target_word[prev_row] == dict_word[prev_col]) {
                     break :blk try dp.get(prev_row, prev_col);
                 }
 
@@ -62,16 +62,27 @@ test "distance" {
     try expectEqual(3, try distance(u8, alloc, "", "foo"));
 }
 
+/// Customisable options to set when performing distance calculations.
+pub const Opts = struct {
+    /// If set to true, the dictionary word will be shortened until it is no longer than the target
+    /// word. This is a no-op if the target word is longer than, or the same length as, the
+    /// dictionary.
+    ///
+    /// This can be useful when trying to 'auto-complete', as it avoids suggesting words which are
+    /// closer simply because the length matches.
+    shorten_dict_words: bool = false,
+};
+
 /// Sorts the provided array in place, where the first element is the shortest Levenshtein distance
 /// to the word.
-pub fn sort_in_place(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t) Error!void {
+pub fn sort_in_place(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t, opts: Opts) Error!void {
     if (dictionary.len == 0) return Error.EmptyDictionary;
 
     var items = try allocator.alloc(DictItem(t), dictionary.len);
     defer allocator.free(items);
 
     for (0.., dictionary) |i, dict_word| {
-        items[i] = try DictItem(t).init(allocator, word, dict_word, i);
+        items[i] = try DictItem(t).init(allocator, word, dict_word, i, opts);
     }
 
     std.sort.heap(DictItem(t), items, {}, DictItem(t).less_than);
@@ -84,9 +95,9 @@ pub fn sort_in_place(comptime t: type, allocator: Allocator, word: []const t, di
 /// first element of the returned array is the shortest Levenshtein distance to the word.
 ///
 /// The caller is responsible for freeing the returned memory.
-pub fn sort(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t) Error![][]const t {
+pub fn sort(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t, opts: Opts) Error![][]const t {
     const dictionary_copy = try allocator.dupe([]const t, dictionary);
-    try sort_in_place(t, allocator, word, dictionary_copy);
+    try sort_in_place(t, allocator, word, dictionary_copy, opts);
     return dictionary_copy;
 }
 
@@ -97,7 +108,7 @@ test "sort" {
     var dict = [_][]const u8{ "bar", "bazbar", "foo" };
     const word = "fo";
 
-    const cp = try sort(u8, alloc, word, &dict);
+    const cp = try sort(u8, alloc, word, &dict, .{});
     defer alloc.free(cp);
 
     // Check the copy has been reordered
@@ -118,7 +129,7 @@ test "sort: empty dictionary" {
     var dict = [_][]const u8{};
     const word = "foo";
 
-    try expectError(Error.EmptyDictionary, sort(u8, alloc, word, &dict));
+    try expectError(Error.EmptyDictionary, sort(u8, alloc, word, &dict, .{}));
 }
 
 fn DictItem(comptime t: type) type {
@@ -131,10 +142,18 @@ fn DictItem(comptime t: type) type {
         // The index of the word in the original dictionary.
         index: usize = 0,
 
-        pub fn init(allocator: Allocator, word: []const t, dict_word: []const t, index: usize) Error!Self {
+        pub fn init(allocator: Allocator, word: []const t, dict_word: []const t, index: usize, opts: Opts) Error!Self {
+            // comp_word is the word by which we do the comparison, it has undergone preprocessing
+            const comp_word = blk: {
+                var cw = dict_word;
+                if (opts.shorten_dict_words and word.len < cw.len) {
+                    cw = cw[0..word.len];
+                }
+                break :blk cw;
+            };
             return Self{
                 .item = dict_word,
-                .l_dist = try distance(t, allocator, word, dict_word),
+                .l_dist = try distance(t, allocator, word, comp_word),
                 .index = index,
             };
         }
@@ -149,8 +168,8 @@ fn DictItem(comptime t: type) type {
 /// Levenshtein distance.
 ///
 /// This function mutates the dictionary in place.
-pub fn closest_values(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t, count: usize) Error![][]const t {
-    try sort_in_place(t, allocator, word, dictionary);
+pub fn closest_values(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t, count: usize, opts: Opts) Error![][]const t {
+    try sort_in_place(t, allocator, word, dictionary, opts);
     return dictionary[0..count];
 }
 
@@ -159,8 +178,8 @@ pub fn closest_values(comptime t: type, allocator: Allocator, word: []const t, d
 /// arbitrarily.
 ///
 /// This function mutates the dictionary in place.
-pub fn closest(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t) Error![]const t {
-    const v = try closest_values(t, allocator, word, dictionary, 1);
+pub fn closest(comptime t: type, allocator: Allocator, word: []const t, dictionary: [][]const t, opts: Opts) Error![]const t {
+    const v = try closest_values(t, allocator, word, dictionary, 1, opts);
     return v[0];
 }
 
@@ -171,5 +190,16 @@ test "closest" {
     var dict = [_][]const u8{ "bar", "bazbar", "foo" };
     const word = "fo";
 
-    try expectEqualStrings("foo", try closest(u8, alloc, word, &dict));
+    try expectEqualStrings("foo", try closest(u8, alloc, word, &dict, .{}));
+}
+
+test "closest: shorten dict word" {
+    const alloc = std.testing.allocator;
+    const expectEqualStrings = std.testing.expectEqualStrings;
+
+    var dict = [_][]const u8{ "foobar", "bar", "bazy" };
+    const word = "foo";
+
+    try expectEqualStrings("foobar", try closest(u8, alloc, word, &dict, .{ .shorten_dict_words = true }));
+    try expectEqualStrings("bar", try closest(u8, alloc, word, &dict, .{ .shorten_dict_words = false }));
 }
