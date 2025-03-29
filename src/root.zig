@@ -1,4 +1,6 @@
-pub const levenshtein = @import("levenshtein.zig");
+const levenshtein = @import("levenshtein.zig");
+
+pub usingnamespace levenshtein;
 
 test "root: test all decls" {
     const std = @import("std");
