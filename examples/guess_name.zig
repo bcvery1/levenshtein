@@ -31,7 +31,7 @@ pub fn main() !void {
     // Use shorten dictionary words here so the input length is matched to the dictionary words.
     // This prevents matching 'Ava' when the user typed in 'Mas' for example, just because they're
     // both three letters long.
-    const closest_name = try lev.closest(allocator, guess, &names, .{ .shorten_dict_words = true });
+    const closest_name = try lev.closest(allocator, guess, &names, .{ .shorten_dict_words = true, .ignore_case = true });
 
     std.debug.print("I think you mean: '{s}'\n", .{closest_name});
 }

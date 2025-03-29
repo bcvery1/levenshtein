@@ -4,14 +4,28 @@ const matrix = @import("matrix.zig");
 const utils = @import("utils.zig");
 
 const Allocator = std.mem.Allocator;
+const ascii = std.ascii;
 
 pub const Error = error{
     EmptyDictionary,
 } || matrix.Error || Allocator.Error;
 
-pub fn distance(allocator: Allocator, target_word: []const u8, dict_word: []const u8) Error!usize {
+fn chars_eql(a: u8, b: u8, opts: Opts) bool {
+    if (opts.ignore_case) return ascii.toLower(a) == ascii.toLower(b);
+    return a == b;
+}
+
+pub fn distance(allocator: Allocator, target_word: []const u8, dict_word: []const u8, opts: Opts) Error!usize {
+    // comp_word is the word by which we do the comparison, it has undergone preprocessing
+    const comp_word = blk: {
+        var cw = dict_word;
+        if (opts.shorten_dict_words and target_word.len < cw.len) {
+            cw = cw[0..target_word.len];
+        }
+        break :blk cw;
+    };
     const rows = target_word.len + 1;
-    const cols = dict_word.len + 1;
+    const cols = comp_word.len + 1;
 
     var dp = try matrix.Matrix(usize).init(allocator, rows, cols);
     defer dp.deinit();
@@ -26,7 +40,7 @@ pub fn distance(allocator: Allocator, target_word: []const u8, dict_word: []cons
             const prev_col = col - 1;
 
             const new_value = blk: {
-                if (target_word[prev_row] == dict_word[prev_col]) {
+                if (chars_eql(target_word[prev_row], comp_word[prev_col], opts)) {
                     break :blk try dp.get(prev_row, prev_col);
                 }
 
@@ -54,12 +68,20 @@ test "distance" {
     const alloc = std.testing.allocator;
     const expectEqual = std.testing.expectEqual;
 
-    try expectEqual(3, try distance(alloc, "kitten", "sitting"));
-    try expectEqual(0, try distance(alloc, "kitten", "kitten"));
-    try expectEqual(6, try distance(alloc, "kitten", "food"));
-    try expectEqual(1, try distance(alloc, "foo", "food"));
-    try expectEqual(3, try distance(alloc, "foo", ""));
-    try expectEqual(3, try distance(alloc, "", "foo"));
+    try expectEqual(3, try distance(alloc, "kitten", "sitting", .{}));
+    try expectEqual(0, try distance(alloc, "kitten", "kitten", .{}));
+    try expectEqual(6, try distance(alloc, "kitten", "food", .{}));
+    try expectEqual(1, try distance(alloc, "foo", "food", .{}));
+    try expectEqual(3, try distance(alloc, "foo", "", .{}));
+    try expectEqual(3, try distance(alloc, "", "foo", .{}));
+}
+
+test "distance: ignore case" {
+    const alloc = std.testing.allocator;
+    const expectEqual = std.testing.expectEqual;
+
+    try expectEqual(1, try distance(alloc, "Kitten", "kitten", .{ .ignore_case = false }));
+    try expectEqual(0, try distance(alloc, "Kitten", "kitten", .{ .ignore_case = true }));
 }
 
 /// Customisable options to set when performing distance calculations.
@@ -71,6 +93,9 @@ pub const Opts = struct {
     /// This can be useful when trying to 'auto-complete', as it avoids suggesting words which are
     /// closer simply because the length matches.
     shorten_dict_words: bool = false,
+    /// If set to true, the dictionary words and target words will be compared with lowercase
+    /// characters only.
+    ignore_case: bool = false,
 };
 
 /// Sorts the provided array in place, where the first element is the shortest Levenshtein distance
@@ -140,17 +165,9 @@ const DictItem = struct {
     index: usize = 0,
 
     fn init(allocator: Allocator, word: []const u8, dict_word: []const u8, index: usize, opts: Opts) Error!DictItem {
-        // comp_word is the word by which we do the comparison, it has undergone preprocessing
-        const comp_word = blk: {
-            var cw = dict_word;
-            if (opts.shorten_dict_words and word.len < cw.len) {
-                cw = cw[0..word.len];
-            }
-            break :blk cw;
-        };
         return DictItem{
             .item = dict_word,
-            .l_dist = try distance(allocator, word, comp_word),
+            .l_dist = try distance(allocator, word, dict_word, opts),
             .index = index,
         };
     }
