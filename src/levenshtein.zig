@@ -42,6 +42,7 @@ pub fn distance(comptime t: type, allocator: Allocator, a: []const t, b: []const
     return dp.get_last();
 }
 
+// Helper function to set the first row to the column index, and the first column to the row index.
 fn set_to_index(mat: *matrix.Matrix(usize), row: usize, col: usize, _: usize) void {
     if (row == 0) mat.set(row, col, col) catch unreachable;
     if (col == 0) mat.set(row, col, row) catch unreachable;
