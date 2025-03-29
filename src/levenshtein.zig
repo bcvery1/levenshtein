@@ -56,4 +56,6 @@ test "distance" {
     try expectEqual(0, try distance(u8, alloc, "kitten", "kitten"));
     try expectEqual(6, try distance(u8, alloc, "kitten", "food"));
     try expectEqual(1, try distance(u8, alloc, "foo", "food"));
+    try expectEqual(3, try distance(u8, alloc, "foo", ""));
+    try expectEqual(3, try distance(u8, alloc, "", "foo"));
 }
