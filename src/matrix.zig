@@ -56,7 +56,9 @@ pub fn Matrix(comptime t: type) type {
         /// Flush one row of the Matrix with a single value.
         fn flush_row(self: *Self, row: usize, value: t) Error!void {
             if (self._invalid_coord(row, 0)) return Error.OutOfRange;
-            self.flush_row_unchecked(row, value);
+            for (0..self.cols) |col| {
+                self.mat[row][col] = value;
+            }
         }
 
         /// Flush one column of the Matrix with a single value.
@@ -84,9 +86,84 @@ pub fn Matrix(comptime t: type) type {
             return self.get(self.rows - 1, self.cols - 1) catch unreachable;
         }
 
+        fn run_row_col(self: *Self, comptime f: fn (mat: *Self, row: usize, col: usize, value: t) void) void {
+            for (0..self.rows) |row| {
+                for (0..self.cols) |col| {
+                    const value = self.get(row, col) catch unreachable;
+                    f(self, row, col, value);
+                }
+            }
+        }
+
+        fn run_row(self: *Self, row: usize, comptime f: fn (mat: *Self, col: usize, value: t) void) Error!void {
+            for (0..self.cols) |col| {
+                const value = try self.get(row, col);
+                // Safe to call the function on this column because the above call will check the
+                // coordinate is valid.
+                f(self, col, value);
+            }
+        }
+
+        fn run_col(self: *Self, col: usize, comptime f: fn (mat: *Self, row: usize, value: t) void) Error!void {
+            for (0..self.rows) |row| {
+                const value = try self.get(row, col);
+                // Safe to call the function on this column because the above call will check the
+                // coordinate is valid.
+                f(self, row, value);
+            }
+        }
+
         // Returns if the coordinate provided is invalid.
         fn _invalid_coord(self: Self, row: usize, col: usize) bool {
             return row >= self.rows or col >= self.cols;
+        }
+
+        test "Matrix: run_row_col" {
+            const alloc = std.testing.allocator;
+            const expectEqual = std.testing.expectEqual;
+
+            var m = try Matrix(u8).init(alloc, 2, 2);
+            defer m.deinit();
+
+            m.flush(0);
+            m.run_row_col(add_one);
+
+            try expectEqual(1, try m.get(0, 0));
+            try expectEqual(1, try m.get(0, 1));
+            try expectEqual(1, try m.get(1, 0));
+            try expectEqual(1, try m.get(1, 1));
+        }
+
+        test "Matrix: run_row" {
+            const alloc = std.testing.allocator;
+            const expectEqual = std.testing.expectEqual;
+
+            var m = try Matrix(u8).init(alloc, 2, 2);
+            defer m.deinit();
+
+            m.flush(0);
+            try m.run_row(0, add_one_row);
+
+            try expectEqual(1, try m.get(0, 0));
+            try expectEqual(0, try m.get(0, 1));
+            try expectEqual(1, try m.get(1, 0));
+            try expectEqual(0, try m.get(1, 1));
+        }
+
+        test "Matrix: run_col" {
+            const alloc = std.testing.allocator;
+            const expectEqual = std.testing.expectEqual;
+
+            var m = try Matrix(u8).init(alloc, 2, 2);
+            defer m.deinit();
+
+            m.flush(0);
+            try m.run_col(0, add_one_col);
+
+            try expectEqual(1, try m.get(0, 0));
+            try expectEqual(1, try m.get(0, 1));
+            try expectEqual(0, try m.get(1, 0));
+            try expectEqual(0, try m.get(1, 1));
         }
 
         test "Matrix: set and get" {
@@ -214,4 +291,19 @@ pub fn Matrix(comptime t: type) type {
 
 test "Matrix" {
     _ = Matrix(u2);
+}
+
+// Test function
+fn add_one(mat: *Matrix(u8), row: usize, col: usize, value: u8) void {
+    mat.set(row, col, value + 1) catch unreachable;
+}
+
+// Test function
+fn add_one_row(mat: *Matrix(u8), row: usize, value: u8) void {
+    mat.set(row, 0, value + 1) catch unreachable;
+}
+
+// Test function
+fn add_one_col(mat: *Matrix(u8), col: usize, value: u8) void {
+    mat.set(0, col, value + 1) catch unreachable;
 }
