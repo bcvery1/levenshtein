@@ -7,12 +7,12 @@ Implementation of the Levenshtein Distance algorithm in Zig.
 
 First use the following command to add the dependency to your `build.zig.zon`:
 ```sh
-zig fetch --save https://github.com/bcvery1/levenshtein/archive/refs/tags/[VERSION].tar.gz
+zig fetch --save https://github.com/bcvery1/levenshtein/archive/refs/tags/[RELEASE VERSION].tar.gz
 ```
 
 You may wish to save the library with a specific name, for example:
 ```sh
-zig fetch --save=lev https://github.com/bcvery1/levenshtein/archive/refs/tags/0.1.0.tar.gz
+zig fetch --save=lev https://github.com/bcvery1/levenshtein/archive/refs/tags/v0.1.0.tar.gz
 ```
 We'll use the name `lev` the next excerpt.
 
