@@ -59,7 +59,7 @@ pub fn main() !void {
 }
 ```
 
-**For more examples on usage, take a look at the [examples](./) directory.**
+For more examples on usage, take a look at the [examples](https://github.com/bcvery1/levenshtein/tree/main/examples) directory.
 
 ## Licence
 [MIT](./LICENSE)
