@@ -29,7 +29,7 @@ You can then import and use the library with `const lev = @import("lev");`
 
 ### Basic usage
 
-This simple example shows how to get the closest word to the user inputed word from a static dictionary:
+This simple example shows how to use the library to sort and get the closest word to any in a dictionary:
 ```zig
 const std = @import("std");
 
