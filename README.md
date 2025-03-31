@@ -31,7 +31,32 @@ You can then import and use the library with `const lev = @import("lev");`
 
 This simple example shows how to get the closest word to the user inputed word from a static dictionary:
 ```zig
-// TODO
+const std = @import("std");
+
+const lev = @import("lev");
+
+const assert = std.debug.assert;
+
+var strs = [_][]const u8{
+    "bread",
+    "vegetables",
+    "cheese",
+    "ale",
+};
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const word1 = "a";
+    try lev.sort_in_place(allocator, word1, &strs, .{});
+    assert(std.mem.eql(u8, "ale", strs[0]));
+
+    const word2 = "vegeta";
+    try lev.sort_in_place(allocator, word2, &strs, .{});
+    assert(std.mem.eql(u8, "vegetables", strs[0]));
+}
 ```
 
 **For more examples on usage, take a look at the [examples](./) directory.**
